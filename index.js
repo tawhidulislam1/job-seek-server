@@ -9,9 +9,10 @@ const app = express();
 const cookieParser = require("cookie-parser");
 const corsOptions = {
   origin: ["https://job-seek-a980a.web.app", "http://localhost:5173"],
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   credentials: true,
   optionalSuccessStatus: 200,
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 app.use(cors(corsOptions));
 app.use(express.json());
@@ -29,16 +30,15 @@ const client = new MongoClient(uri, {
 
 const verifyToken = async (req, res, next) => {
   const token = req.cookies?.token;
-  // console.log(token);
+  console.log(token);
   if (!token) return res.status(401).send({ message: "anthorized access" });
   jwt.verify(token, process.env.SCREAT_KEY, (err, decoded) => {
     if (err) {
       res.status(401).send({ message: "anthorized access" });
     }
     req.user = decoded;
+    next();
   });
-
-  next();
 };
 
 async function run() {
@@ -49,9 +49,15 @@ async function run() {
 
     //genarete jwt
 
-    app.post("/jwt", verifyToken, async (req, res) => {
-      const email = req.body;
-      const token = jwt.sign(email, process.env.SCREAT_KEY, {
+    app.post("/jwt", async (req, res) => {
+      const { email } = req.body;
+
+      if (!email) {
+        return res
+          .status(400)
+          .send({ success: false, message: "Email is required" });
+      }
+      const token = jwt.sign({ email }, process.env.SCREAT_KEY, {
         expiresIn: "365d",
       });
       // console.log(token);
@@ -143,11 +149,13 @@ async function run() {
     app.get("/bids/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const decodedEmail = req.user?.email;
-      const query = { buyer: email };
-      // console.log("email form params", email);
-      // console.log("email form decodedEmail", decodedEmail);
-      if (decodedEmail !== email)
-        return res.status(401).send({ message: "anthorized access" });
+      console.log("email form params", email);
+      console.log("email form decodedEmail", decodedEmail);
+
+      if (decodedEmail !== email) {
+        return res.status(401).send({ message: "Unauthorized access" });
+      }
+      const query = { email };
       const result = await bidsCollection.find(query).toArray();
       res.send(result);
     });
